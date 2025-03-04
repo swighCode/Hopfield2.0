@@ -1,10 +1,10 @@
 from PIL import Image
 from torchvision import transforms
 import matplotlib.pyplot as plt
-import numpy as np
 
 def tensor_to_image(image_vector):
     # Reshape the flattened tensor (4096,) back to (64, 64)
+    image_vector = image_vector * 0.5 + 0.5
     image_tensor = image_vector.view(64, 64)
 
     # Convert to NumPy array
@@ -28,15 +28,15 @@ def process_image(image_path):
     transform = transforms.Compose([
         transforms.Resize((64, 64)),  # Resize to 64x64 pixels
         transforms.ToTensor(),        # Convert image to tensor (values between 0 and 1)
-        transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize to range [0, 1]
+        transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize: (x-0.5)/0.5 gives range [-1, 1]
     ])
 
     # Apply the transformation
     image_tensor = transform(image)
 
     # Flatten the image (64x64 becomes a vector of size 4096)
+    return image_tensor[0].view(-1)
 
-    return image_tensor[0]
 
 # Example usage
 # image_path = 'test1.png'
