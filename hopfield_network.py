@@ -24,6 +24,8 @@ new_state = X @ torch.softmax(torch.matmul(X.T, state), 0) # size=(inp_size)
 
 class Hopfield(nn.Module):
     def __init__(self, X):
+        if X.dim() == 1:
+            X = X.view(-1, 1)
         self.X = X # (inp_size, num_patterns)
         self.N = torch.tensor(X.shape[1]) # number of patterns
         self.M = torch.max(X)
@@ -42,27 +44,15 @@ class Hopfield(nn.Module):
 
 
 test_image = process_image('test1.png')
-# print(test_image.shape)
-# print(test_image)
 hopfield = Hopfield(test_image)
 state = torch.randn(test_image.shape)
 # tensor_to_image(state)
 
-noisy_pattern = test_image + 0.2 * torch.randn_like(test_image)
-# tensor_to_image(test_image)
-# tensor_to_image(noisy_pattern)
+noisy_pattern = test_image + 0.5 * torch.randn_like(test_image)
+tensor_to_image(test_image)
+tensor_to_image(noisy_pattern)
 
-state = hopfield.forward(state)
-state = hopfield.forward(state)
-state = hopfield.forward(state)
-state = hopfield.forward(state)
-state = hopfield.forward(state)
-
-plt.imshow(state, cmap='gray')
-plt.show()
-# tensor_to_image(state)
-
-data = datasets.MNIST('../data', train=True, download=True)
-imgs = torch.stack([transforms.functional.pil_to_tensor(data[i][0]).flatten().float() for i in range(300)], 1)
-# print(imgs.shape)
-# print(imgs)
+state = hopfield.forward(noisy_pattern)
+for i in range(10):
+    state = hopfield.forward(state)
+    tensor_to_image(state)
