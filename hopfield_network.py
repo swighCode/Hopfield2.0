@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import sklearn as sk
+import os
 import matplotlib.pyplot as plt
 from image_processing import tensor_to_image, process_image
 from torchvision import datasets, transforms
@@ -43,16 +44,45 @@ class Hopfield(nn.Module):
         return new_state
 
 
-test_image = process_image('test1.png')
-hopfield = Hopfield(test_image)
-state = torch.randn(test_image.shape)
+test_image = process_image('testface1.jpg')
+test_image_2 = process_image('testface2.jpg')
+test_image_3 = process_image('testface3.jpg')
+'''
+hopfield = Hopfield(torch.stack((test_image, test_image_2)).T)
+state = torch.randn(test_image_3.shape)
 # tensor_to_image(state)
 
-noisy_pattern = test_image + 0.5 * torch.randn_like(test_image)
-tensor_to_image(test_image)
-tensor_to_image(noisy_pattern)
+noisy_pattern = test_image_3 + 0.5 * torch.randn_like(test_image_3)
+censored_face = process_image('censoredface.jpg')
+tensor_to_image(test_image_3)
+tensor_to_image(censored_face)
 
-state = hopfield.forward(noisy_pattern)
-for i in range(10):
-    state = hopfield.forward(state)
-    tensor_to_image(state)
+state = hopfield.forward(censored_face)
+tensor_to_image(state)
+'''
+#Pseudo code for hopfield using dataset:
+query_images = [test_image_3] #Query images (face has to be in network, but not identical image)
+#query_images = [qimg_1, qimg_2, qimg_3, qimg_4, qimg_5]
+query_imgs_in_network = [test_image] #The corresponding faces we want to retrieve (fill manually?)
+#query_imgs_in_network = [qiin_1, qiin_2, qiin_3, qiin_4, qiin_5]
+loaded_images = torch.load("faces_dataset.pt") #Array of image tensors that we later stack.
+amount_epochs = 10
+epoch = 0
+failed_epochs = []
+for query_image in query_images:
+    while epoch < amount_epochs:
+        print("Epoch {}/{}".format(epoch+1, amount_epochs))
+        curr_batch = torch.stack(query_imgs_in_network)
+        for i in range(int(len(loaded_images)*epoch/amount_epochs), int(len(loaded_images)*(epoch+1)/amount_epochs)):
+            curr_batch = torch.stack((curr_batch, loaded_images[i]))
+        hopfield_network = Hopfield(curr_batch.T)
+        result = hopfield_network(query_image)
+        tensor_to_image(query_image)
+        tensor_to_image(result)
+        if not np.isclose(result, curr_batch[query_image.index()]):
+            print("Failed to retrieve at epoch {}/{}".format(epoch+1, amount_epochs))
+            failed_epochs.append(epoch)
+            break
+        else:
+            print("Successfully retrieved at epoch {}/{}".format(epoch+1, amount_epochs))
+            epoch = epoch + 1
