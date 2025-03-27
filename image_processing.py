@@ -46,12 +46,3 @@ def process_image(image_path):
 # tensor_to_image(image_vector)
 # print(image_vector)  # This should be torch.Size([4096]) for 64x64 images
 
-
-images = []
-image_tensors = process_image('testface1.jpg')
-for path in os.listdir('testfaces'):
-    if path.endswith('.jpg'):
-        #We should just save the faces on disk (this will take forever otherwise)
-        image = process_image('testfaces/' + path)
-        image_tensors.append(image)
-        torch.save(image_tensors, "test_faces_dataset.pt")
