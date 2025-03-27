@@ -25,10 +25,11 @@ new_state = X @ torch.softmax(torch.matmul(X.T, state), 0) # size=(inp_size)
 
 class Hopfield(nn.Module):
     def __init__(self, X):
+        super().__init__()
         if X.dim() == 1:
             X = X.view(-1, 1)
-        self.X = X # (inp_size, num_patterns)
-        self.N = torch.tensor(X.shape[1]) # number of patterns
+        self.X = X  # (inp_size, num_patterns)
+        self.N = torch.tensor(X.shape[1])  # number of patterns
         self.M = torch.max(X)
 
     def energy_fn(self, state):
@@ -44,45 +45,86 @@ class Hopfield(nn.Module):
         return new_state
 
 
-test_image = process_image('testface1.jpg')
-test_image_2 = process_image('testface2.jpg')
-test_image_3 = process_image('testface3.jpg')
-'''
-hopfield = Hopfield(torch.stack((test_image, test_image_2)).T)
-state = torch.randn(test_image_3.shape)
-# tensor_to_image(state)
 
-noisy_pattern = test_image_3 + 0.5 * torch.randn_like(test_image_3)
-censored_face = process_image('censoredface.jpg')
-tensor_to_image(test_image_3)
-tensor_to_image(censored_face)
+def main():
+    # Load and process training images with labels
+    training_images_folder = 'training_faces'
+    processed_images = []
 
-state = hopfield.forward(censored_face)
-tensor_to_image(state)
-'''
-#Pseudo code for hopfield using dataset:
-query_images = [test_image_3] #Query images (face has to be in network, but not identical image)
-#query_images = [qimg_1, qimg_2, qimg_3, qimg_4, qimg_5]
-query_imgs_in_network = [test_image] #The corresponding faces we want to retrieve (fill manually?)
-#query_imgs_in_network = [qiin_1, qiin_2, qiin_3, qiin_4, qiin_5]
-loaded_images = torch.load("faces_dataset.pt") #Array of image tensors that we later stack.
-amount_epochs = 10
-epoch = 0
-failed_epochs = []
-for query_image in query_images:
-    while epoch < amount_epochs:
-        print("Epoch {}/{}".format(epoch+1, amount_epochs))
-        curr_batch = torch.stack(query_imgs_in_network)
-        for i in range(int(len(loaded_images)*epoch/amount_epochs), int(len(loaded_images)*(epoch+1)/amount_epochs)):
-            curr_batch = torch.stack((curr_batch, loaded_images[i]))
-        hopfield_network = Hopfield(curr_batch.T)
-        result = hopfield_network(query_image)
-        tensor_to_image(query_image)
-        tensor_to_image(result)
-        if not np.isclose(result, curr_batch[query_image.index()]):
-            print("Failed to retrieve at epoch {}/{}".format(epoch+1, amount_epochs))
-            failed_epochs.append(epoch)
-            break
+    for root, _, files in os.walk(training_images_folder):
+        label = os.path.basename(root)
+        for file in files:
+            if file.endswith('.pgm'):
+                image_path = os.path.join(root, file)
+                image = process_image(image_path)
+                processed_images.append((image, label))
+
+    # Save and load with labels
+    torch.save(processed_images, 'faces_dataset.pt')
+    loaded_list = torch.load("faces_dataset.pt", weights_only=True)
+    stored_images = [item[0] for item in loaded_list]
+    stored_labels = [item[1] for item in loaded_list]
+    stored_patterns = torch.stack(stored_images).T
+
+    # Initialize Hopfield network
+    hopnet = Hopfield(stored_patterns)
+    print(f"Network initialized with {stored_patterns.shape[1]} patterns")
+
+    # Load query images with labels
+    query_data = []
+    test_faces_folder = 'test_faces'
+    for root, _, files in os.walk(test_faces_folder):
+        label = os.path.basename(root)
+        for file in files:
+            if file.endswith('.pgm'):
+                image_path = os.path.join(root, file)
+                image = process_image(image_path)
+                query_data.append((image, label, file))
+
+    # Set display flag to true for visualization
+    display = True
+
+    # Test pattern retrieval
+    num_success = 0
+    for query_img, query_label, query_name in query_data:
+        print(f"\nTesting retrieval for: {query_name} (True class: {query_label})")
+        
+        # Add noise to the query pattern
+        noisy_query = query_img + 0.5 * torch.randn_like(query_img)
+        
+        # Display original and noisy
+        if display:
+            tensor_to_image(query_img)
+            tensor_to_image(noisy_query)
+        
+        # Retrieve pattern through network dynamics
+        state = noisy_query.clone()
+        prev_state = torch.zeros_like(state)
+        
+        # Iterate until convergence or max iterations
+        for _ in range(100):
+            prev_state.copy_(state)
+            state = hopnet(state)
+            if torch.allclose(state, prev_state, atol=1e-4):
+                break
+        
+        # Find closest stored pattern
+        similarity = torch.matmul(stored_patterns.T, state) # Dot product to get vector with similarity scores
+        retrieved_idx = torch.argmax(similarity) # Get the index with the highest similarity score
+        retrieved_label = stored_labels[retrieved_idx]
+        
+        # Check if retrieved label matches query's true label
+        if retrieved_label == query_label:
+            num_success += 1
+            print(f"Retrieved class: {retrieved_label} ✔️")
         else:
-            print("Successfully retrieved at epoch {}/{}".format(epoch+1, amount_epochs))
-            epoch = epoch + 1
+            print(f"Retrieved class: {retrieved_label} ❌")
+
+        # Show retrieved pattern
+        if display:
+            tensor_to_image(state)
+
+    print(f"\nRetrieval accuracy: {num_success/len(query_data):.2%}")
+
+if __name__ == "__main__":
+    main()
