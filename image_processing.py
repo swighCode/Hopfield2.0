@@ -3,6 +3,9 @@ from torchvision import transforms
 import matplotlib.pyplot as plt
 import torch
 import os
+import rembg
+import numpy as np
+
 def tensor_to_image(image_vector):
     # Reshape the flattened tensor (4096,) back to (64, 64)
     image_vector = image_vector * 0.5 + 0.5
@@ -37,6 +40,19 @@ def process_image(image_path):
 
     # Flatten the image (64x64 becomes a vector of size 4096)
     return image_tensor[0].view(-1)
+
+
+def remove_background(image_path):
+    input_image = Image.open(image_path)
+    input_array = np.array(input_image)
+
+    output_array = rembg.remove(input_array)
+    output_image = Image.fromarray(output_array)
+    output_path = image_path.replace('training_faces', 'training_faces_no_bg')  # Replace only the first occurrence
+    output_dir = os.path.dirname(output_path)
+    os.makedirs(output_dir, exist_ok=True)
+    output_image.save(output_path)
+
 
 
 # Example usage
