@@ -11,14 +11,14 @@ inp_size = 64*64
 
 N = torch.tensor(1)
 X = torch.randn(inp_size, N)
-B = 1
+B = .0001
 
 M = torch.max(X).item()
 state = torch.randn(inp_size)
 
 lse = -torch.logsumexp(torch.matmul(X.T, state), 0) # return a float
 state_mul = torch.dot(state, state)*0.5 # return a float
-divers = B * torch.log(N) + M**2 * 0.5
+divers = torch.log(N) + M**2 * 0.5
 E = lse + state_mul + divers
 new_state = X @ torch.softmax(torch.matmul(X.T, state), 0) # size=(inp_size)
 
@@ -35,29 +35,30 @@ class Hopfield(nn.Module):
     def energy_fn(self, state):
         lse = -torch.logsumexp(torch.matmul(self.X.T, state), 0) # float
         quad = torch.dot(state, state) # float
-        divers = torch.log(self.N) + self.M**2 * 0.5 # float
+        divers = B * torch.log(self.N) + self.M**2 * 0.5 # float
 
         E = lse + quad + divers # float
         return E
 
     def forward(self, state):
-        new_state = self.X @ torch.softmax(torch.matmul(self.X.T, state), 0) # (inp_size)
+        new_state = self.X @ torch.softmax(B * torch.matmul(self.X.T, state), 0) # (inp_size)
         return new_state
 
 
 
 def main():
     # Load and process training images with labels
-    training_images_folder = 'training_faces'
+    training_images_folder = 'dataset'
     processed_images = []
 
     for root, _, files in os.walk(training_images_folder):
         label = os.path.basename(root)
         for file in files:
-            if file.endswith('.pgm'):
+            split = file.split('_')
+            if file.endswith('.jpg') and split[1].startswith('2') and "30" in split[2]:
                 image_path = os.path.join(root, file)
                 image = process_image(image_path)
-                processed_images.append((image, label))
+                processed_images.append((image, split[0]))
 
     # Save and load with labels
     torch.save(processed_images, 'faces_dataset.pt')
@@ -72,25 +73,26 @@ def main():
 
     # Load query images with labels
     query_data = []
-    test_faces_folder = 'test_faces'
+    test_faces_folder = 'dataset'
     for root, _, files in os.walk(test_faces_folder):
         label = os.path.basename(root)
         for file in files:
-            if file.endswith('.pgm'):
+            split = file.split('_')
+            if file.endswith('.jpg') and split[1].startswith('22') and "00" in split[2]:
+                print(file)
                 image_path = os.path.join(root, file)
                 image = process_image(image_path)
-                query_data.append((image, label, file))
+                query_data.append((image, split[0], file))
 
     # Set display flag to true for visualization
     display = True
 
-    # Test pattern retrieval
     num_success = 0
     for query_img, query_label, query_name in query_data:
         print(f"\nTesting retrieval for: {query_name} (True class: {query_label})")
         
         # Add noise to the query pattern
-        noisy_query = query_img + 0.5 * torch.randn_like(query_img)
+        noisy_query = query_img + 2 * torch.randn_like(query_img)
         
         # Display original and noisy
         if display:
@@ -102,15 +104,20 @@ def main():
         prev_state = torch.zeros_like(state)
         
         # Iterate until convergence or max iterations
-        for _ in range(100):
+        for i in range(100):
             prev_state.copy_(state)
-            state = hopnet(state)
+            state = hopnet.forward(state)
+            # tensor_to_image(state)
             if torch.allclose(state, prev_state, atol=1e-4):
                 break
         
+        # Show the network's actual output
+        if display:
+            tensor_to_image(state)
+        
         # Find closest stored pattern
-        similarity = torch.matmul(stored_patterns.T, state) # Dot product to get vector with similarity scores
-        retrieved_idx = torch.argmax(similarity) # Get the index with the highest similarity score
+        similarity = torch.matmul(stored_patterns.T, state)
+        retrieved_idx = torch.argmax(similarity)
         retrieved_label = stored_labels[retrieved_idx]
         
         # Check if retrieved label matches query's true label
@@ -120,11 +127,7 @@ def main():
         else:
             print(f"Retrieved class: {retrieved_label} ❌")
 
-        # Show retrieved pattern
-        if display:
-            tensor_to_image(state)
-
-    print(f"\nRetrieval accuracy: {num_success/len(query_data):.2%}")
+    print(f"\nRetrieval accuracy: {num_success/len(query_data):.2%} {len(query_data)} images tested")
 
 if __name__ == "__main__":
     main()
