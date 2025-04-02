@@ -9,7 +9,7 @@ import numpy as np
 def tensor_to_image(image_vector):
     # Reshape the flattened tensor (4096,) back to (64, 64)
     image_vector = image_vector * 0.5 + 0.5
-    image_tensor = image_vector.view(64, 64)
+    image_tensor = image_vector.view(128, 128)
 
     # Convert to NumPy array
     image_array = image_tensor.numpy()
@@ -30,7 +30,7 @@ def process_image(image_path):
 
     # Define the transformation (resize, convert to tensor, and normalize)
     transform = transforms.Compose([
-        transforms.Resize((64, 64)),  # Resize to 64x64 pixels
+        transforms.Resize((128, 128)),  # Resize to 64x64 pixels
         transforms.ToTensor(),        # Convert image to tensor (values between 0 and 1)
         transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize: (x-0.5)/0.5 gives range [-1, 1]
     ])
