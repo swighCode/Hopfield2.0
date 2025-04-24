@@ -4,7 +4,7 @@ import os
 from PIL import Image
 from image_processing import tensor_to_image, process_image
 
-def censor_eyes(image_path, output_path, censor_width, censor_height):
+def censor_eyes(image_path, output_path):
     """Censor the eyes in an image by applying a black rectangle."""
     # Load the image
     image = cv2.imread(image_path)
@@ -25,9 +25,13 @@ def censor_eyes(image_path, output_path, censor_width, censor_height):
         x_max = max([x + w for (x, y, w, h) in eyes])
         y_max = max([y + h for (x, y, w, h) in eyes])
         cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 0, 0), -1)
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
     # Save the censored image
     cv2.imwrite(output_path, image)
-    print(f"Censored image saved to {output_path}")
 
 def gaussian_blur_whole_face(image_path, output_path, sigma):
     """"Apply Gaussian blur to the whole face in an image."""
@@ -49,9 +53,12 @@ def gaussian_blur_whole_face(image_path, output_path, sigma):
         blurred_face = cv2.GaussianBlur(face_region, (0, 0), sigma)
         image[y:y+h, x:x+w] = blurred_face
 
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
     # Save the blurred image
     cv2.imwrite(output_path, image)
-    print(f"Blurred image saved to {output_path}")
 
 def mosaic_whole_face(image_path, output_path, mosaic_size):
     """Apply mosaic effect to the whole face in an image."""
@@ -74,9 +81,12 @@ def mosaic_whole_face(image_path, output_path, mosaic_size):
         mosaic_face = cv2.resize(small_face, (w, h), interpolation=cv2.INTER_NEAREST)
         image[y:y+h, x:x+w] = mosaic_face
 
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
     # Save the mosaiced image
     cv2.imwrite(output_path, image)
-    print(f"Mosaiced image saved to {output_path}")
 
 
 #Print image:
@@ -84,3 +94,22 @@ def print_image_path(image_path):
     """Print the image using PIL."""
     image = Image.open(image_path)
     image.show()
+
+if __name__ == "__main__":
+    # Example usage
+    image_path = './dataset/MF0901_1100_00F.jpg'  # Path to the input image
+    output_path_censor = 'output/censored_eyes.jpg'  # Path to save the censored image
+    output_path_blur = 'output/blurred_face.jpg'  # Path to save the blurred image
+    output_path_mosaic = 'output/mosaiced_face.jpg'  # Path to save the mosaiced image
+
+    # Censor eyes in the image
+    censor_eyes(image_path, output_path_censor, 50, 50)
+
+    # Apply Gaussian blur to the whole face in the image
+    gaussian_blur_whole_face(image_path, output_path_blur, sigma=15)
+
+    # Apply mosaic effect to the whole face in the image
+    mosaic_whole_face(image_path, output_path_mosaic, mosaic_size=10)
+
+    # Print the censored image
+    print_image_path(output_path_censor)
