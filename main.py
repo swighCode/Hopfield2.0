@@ -27,8 +27,6 @@ def load_patterns(folder: str, max_images: int = None):
     collected = 0
     for root, _, files in os.walk(folder):
         for file in files:
-            if not file.lower().endswith('.jpg'):
-                continue
             parts = file.split('_')
             path = os.path.join(root, file)
             img = process_image(path)
@@ -91,7 +89,7 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
 def main():
     training_folder = 'dataset/train'
     test_folder = 'dataset/test'
-    image_counts = [5, 10, 20, 40, 80, 100, 150, 200]
+    image_counts = [5, 10, 20, 40, 80, 100, 150, 186]
     results = []
 
     for count in image_counts:
