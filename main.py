@@ -35,8 +35,6 @@ def load_patterns(folder: str, max_images: int = None):
             collected += 1
             if max_images and collected >= max_images:
                 break
-        if max_images and collected >= max_images:
-            break
     patterns = torch.stack(images).T
     return patterns, labels
 
@@ -89,7 +87,7 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
 def main():
     training_folder = 'dataset/train'
     test_folder = 'dataset/test'
-    image_counts = [5, 10, 20, 40, 80, 100, 150, 186]
+    image_counts = list(range(5, 187, 5))
     results = []
 
     for count in image_counts:
@@ -102,7 +100,7 @@ def main():
                 'param': 'none',
                 'accuracy': acc,
             })
-            print(f"Count: {count}, Method: {method}, Accuracy: {acc:.2%}")
+            # print(f"Count: {count}, Method: {method}, Accuracy: {acc:.2%}")
 
         for method in CENSOR_METHODS:
             for param in CENSOR_PARAM_SWEEPS[method]:
@@ -114,9 +112,12 @@ def main():
                     'param': param if param is not None else 'none',
                     'accuracy': acc,
                 })
-                print(f"Count: {count}, Method: {method}, Param: {param}, Accuracy: {acc:.2%}")
+                # print(f"Count: {count}, Method: {method}, Param: {param}, Accuracy: {acc:.2%}")
 
     df = pd.DataFrame(results)
+    df.to_csv('results.csv', index=False)
+    pivot_df = df.pivot_table(index='method', columns='num_images', values='accuracy')
+    pivot_df.to_csv('results_pivot.csv')
     print("\nRetrieval Rates Table:")
     print(df.pivot_table(index='method', columns='num_images', values='accuracy'))
 
