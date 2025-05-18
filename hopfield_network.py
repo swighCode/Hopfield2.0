@@ -1,39 +1,22 @@
 import torch
 import torch.nn as nn
 
-inp_size = 64*64
-
-N = torch.tensor(1)
-X = torch.randn(inp_size, N)
-B = .5
-
-M = torch.max(X).item()
-state = torch.randn(inp_size)
-
-lse = -torch.logsumexp(torch.matmul(X.T, state), 0) # return a float
-state_mul = torch.dot(state, state)*0.5 # return a float
-divers = torch.log(N) + M**2 * 0.5
-E = lse + state_mul + divers
-new_state = X @ torch.softmax(torch.matmul(X.T, state), 0) # size=(inp_size)
-
-
 class Hopfield(nn.Module):
-    def __init__(self, X):
+    def __init__(self, X, B=1.0):
         super().__init__()
         if X.dim() == 1:
             X = X.view(-1, 1)
-        self.X = X  # (inp_size, num_patterns)
-        self.N = torch.tensor(X.shape[1])  # number of patterns
-        self.M = torch.max(X)
+        self.register_buffer("X", X)  # (inp_size, num_patterns)
+        self.B = B  # β as a learnable parameter if desired
 
-    def energy_fn(self, state):
-        lse = -torch.logsumexp(torch.matmul(self.X.T, state), 0) # float
-        quad = torch.dot(state, state) # float
-        divers = B * torch.log(self.N) + self.M**2 * 0.5 # float
-
-        E = lse + quad + divers # float
+    def energy(self, state):
+        inner_products = torch.matmul(self.X.T, state)  # (num_patterns,)
+        lse = -(1/self.B) * torch.logsumexp(self.B * inner_products, dim=0)
+        quad = 0.5 * torch.dot(state, state)
+        E = lse + quad
         return E
 
     def forward(self, state):
-        new_state = self.X @ torch.softmax(B * torch.matmul(self.X.T, state), 0) # (inp_size)
+        inner_products = torch.matmul(self.X.T, state)  # (num_patterns,)
+        new_state = self.X @ torch.softmax(self.B * inner_products, dim=0)
         return new_state
