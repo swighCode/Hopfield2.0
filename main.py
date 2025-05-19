@@ -43,7 +43,7 @@ def load_patterns(folder: str, max_images: int = None, bipolar=False):
     if bipolar:
         bipolars = []
         for img in images:
-            bipolar = apply_atkinson(img)
+            bipolar = apply_adaptive_binarization(img)
             bipolars.append(bipolar)
         patterns = torch.stack(bipolars).T
     else:
@@ -51,48 +51,55 @@ def load_patterns(folder: str, max_images: int = None, bipolar=False):
 
     return patterns, labels
     
-def apply_atkinson(img_tensor):
+def apply_adaptive_binarization(img_tensor, block_size=11, c_offset=0.02):
+    if not isinstance(img_tensor, torch.Tensor):
+        raise TypeError("Input must be a PyTorch tensor.")
+    if img_tensor.dim() != 1:
+        raise ValueError("Input tensor must be 1-dimensional.")
+    if not isinstance(block_size, int) or block_size <= 0 or block_size % 2 == 0:
+        raise ValueError("block_size must be a positive odd integer.")
+
     # Convert the tensor to a numpy array and reshape to 2D
-    img_np = img_tensor.detach().clone().numpy()
-    length = img_np.size
+    img_np_gray = img_tensor.detach().clone().numpy()
+    length = img_np_gray.size
+    if length == 0:
+        return torch.tensor([], dtype=torch.float32)  # Handle empty tensor
+
     side = int(math.sqrt(length))
     if side * side != length:
-        raise ValueError("Image tensor must be a perfect square.")
-    img_2d = img_np.reshape((side, side))
-    
-    # Create a float copy for error diffusion
-    img_float = img_2d.astype(np.float32)
-    
+        raise ValueError(
+            f"Image tensor length must be a perfect square. Got length: {length}"
+        )
+    img_2d_gray = img_np_gray.reshape((side, side)).astype(np.float32)
+
+    # Prepare the output binary image
+    binary_img_np = np.zeros_like(img_2d_gray, dtype=np.float32)
+
+    # Pad the image to handle borders when calculating neighborhood means
+    pad_width = block_size // 2
+    # Using 'reflect' padding is often a good choice for images
+    padded_img = np.pad(img_2d_gray, pad_width, mode='reflect')
+
+    # Apply adaptive thresholding
     for y in range(side):
         for x in range(side):
-            old_pixel = img_float[y, x]
-            new_pixel = 1.0 if old_pixel >= 0.5 else 0.0
-            img_float[y, x] = new_pixel
-            error = old_pixel - new_pixel
+            # Define the window in the padded image
+            # The current pixel (y,x) in img_2d_gray corresponds to the center
+            # of the window starting at (y,x) in the padded_img
+            # (since pad_width was added to each side of img_2d_gray to get padded_img)
+            window = padded_img[y : y + block_size, x : x + block_size]
             
-            # Distribute error according to Atkinson's algorithm
-            error_frac = error / 8.0
-            # Define the offsets for error distribution
-            offsets = [
-                (1, 0),   # Right 1
-                (2, 0),   # Right 2
-                (-1, 1),  # Left 1, Down 1
-                (0, 1),   # Down 1
-                (1, 1),   # Right 1, Down 1
-                (0, 2),   # Down 2
-            ]
-            for dx, dy in offsets:
-                xn = x + dx
-                yn = y + dy
-                if 0 <= xn < side and 0 <= yn < side:
-                    img_float[yn, xn] += error_frac
-    
-    # Convert to binary (0s and 1s) after dithering
-    binary_img = (img_float >= 0.5).astype(np.float32)
-    
-    # Convert binary image to bipolar (-1 and 1)
-    bipolar_img = binary_img * 2 - 1
-    
+            local_mean = np.mean(window)
+            dynamic_threshold = local_mean - c_offset
+            
+            if img_2d_gray[y, x] >= dynamic_threshold:
+                binary_img_np[y, x] = 1.0
+            else:
+                binary_img_np[y, x] = 0.0
+
+    # Convert binary image (0s and 1s) to bipolar (-1s and 1s)
+    bipolar_img = binary_img_np * 2.0 - 1.0
+
     # Flatten and return as a tensor
     return torch.tensor(bipolar_img.flatten(), dtype=torch.float32)
 
@@ -150,8 +157,8 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
                         break
 
             else:
-                state = apply_atkinson(query_img)
-                tensor_to_image(state)
+                state = apply_adaptive_binarization(query_img)
+                # tensor_to_image(state)
                 prev = torch.zeros_like(state)
                 for _ in range(100):
                     prev = state.clone()
@@ -159,7 +166,7 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
                     if torch.allclose(state, prev, atol=1e-4):
                         break
                 state[state == 0] = 1  # Handle any remaining zeros
-                tensor_to_image(state)
+                # tensor_to_image(state)
 
             '''
             -----------------
@@ -191,7 +198,7 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
 def main():
     training_folder = 'dataset/train'
     test_folder = 'dataset/test'
-    image_counts = list(range(5, 20, 5))
+    image_counts = list(range(1, 51, 5))
     results = []
 
     for model_type in ['modern', 'classical']:
@@ -204,21 +211,22 @@ def main():
                     'num_images': count,
                     'method': method,
                     'param': 'none',
+                    'model_type': model_type,
                     'accuracy': acc,
                 })
-
-            for method in CENSOR_METHODS:
-                for param in CENSOR_PARAM_SWEEPS[method]:
-                    method_label = f"{method}_{param}" if param is not None else method
-                    print(f"Evaluating {method_label} with {count} images...")
-                    acc = evaluate_retrieval(patterns, labels, test_folder, method, param_val=param, model_type=model_type)
-                    results.append({
-                        'num_images': count,
-                        'method': method_label,
-                        'param': param if param is not None else 'none',
-                        'model_type': model_type,
-                        'accuracy': acc,
-                    })
+            if model_type == "modern":
+                for method in CENSOR_METHODS:
+                    for param in CENSOR_PARAM_SWEEPS[method]:
+                        method_label = f"{method}_{param}" if param is not None else method
+                        print(f"Evaluating {method_label} with {count} images...")
+                        acc = evaluate_retrieval(patterns, labels, test_folder, method, param_val=param, model_type=model_type)
+                        results.append({
+                            'num_images': count,
+                            'method': method_label,
+                            'param': param if param is not None else 'none',
+                            'model_type': model_type,
+                            'accuracy': acc,
+                        })
 
     df = pd.DataFrame(results)
     df.to_csv('results.csv', index=False)
