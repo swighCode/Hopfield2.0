@@ -120,7 +120,6 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
             if label not in labels:
                 continue
 
-
             '''
             -----------------
             IMAGE PROCESSING
@@ -188,24 +187,32 @@ def evaluate_retrieval(patterns: torch.Tensor, labels: list, test_folder: str, m
             total += 1
             if label == retrieved:
                 success += 1
-                print(f"Success: {label} -> {retrieved}")
-            else:
-                print(f"Failure: {label} vs {retrieved}")
-
+                # print(f"Success: {label} -> {retrieved}")
+            # else:
+                # print(f"Failure: {label} vs {retrieved}")
     return success / total if total > 0 else 0.0
 
 
 def main():
     training_folder = 'dataset/train'
     test_folder = 'dataset/test'
-    image_counts = list(range(1, 51, 5))
+    image_counts = list(range(1, 10, 1)) + list(range(10, 50, 5)) + list(range(50, 120, 10)) + list(range(120, 180, 20)) + [183]
     results = []
-
+    stop = False
     for model_type in ['modern', 'classical']:
+        if stop:
+            break
         for count in image_counts:
+            if stop:
+                break
             patterns, labels = load_patterns(training_folder, max_images=count, bipolar=(model_type == "classical"))
             for method in ['original']:
+                if stop:
+                    break
                 print(f"Evaluating {method} with {count} images...")
+                if model_type == "classical" and count > 20:
+                    stop = True
+                    break
                 acc = evaluate_retrieval(patterns, labels, test_folder, method, model_type=model_type)
                 results.append({
                     'num_images': count,
